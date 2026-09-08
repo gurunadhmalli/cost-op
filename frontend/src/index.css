@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    font-family: 'Inter', sans-serif;
+    background-color: #EBF0F7;
+    color: #1E293B;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+  }
+}
+
+/* Custom Soft Scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #EBF0F7;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #CAD4E2;
+  border-radius: 9999px;
+  border: 2px solid #EBF0F7;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #B0BCCE;
+}
+
+/*
+  Compact "industrial application" surface classes — kept the neu- names so
+  every existing component using them updates in place, but the values are
+  now flat/dense (thin border + a short, tight shadow) instead of the tall
+  soft-UI neumorphic shadows that read as a marketing/SaaS website.
+*/
+.neu-card {
+  background: #F4F7FB;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+  border: 1px solid #DCE3EE;
+  border-radius: 0.625rem;
+}
+
+.neu-card-sm {
+  background: #F4F7FB;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border: 1px solid #DCE3EE;
+  border-radius: 0.5rem;
+}
+
+.neu-card-hover {
+  transition: all 0.15s ease;
+}
+
+.neu-card-hover:hover {
+  border-color: #B8C4D6;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.neu-inset {
+  background: #E9EEF6;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.07);
+  border: 1px solid #DCE3EE;
+  border-radius: 0.5rem;
+}
+
+.neu-inset-sm {
+  background: #E9EEF6;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.06);
+  border-radius: 0.375rem;
+}
+
+.neu-btn {
+  background: #F4F7FB;
+  border: 1px solid #DCE3EE;
+  transition: all 0.15s ease;
+}
+
+.neu-btn:hover {
+  background: #FFFFFF;
+  border-color: #B8C4D6;
+}
+
+.neu-btn:active, .neu-btn.active {
+  background: #E9EEF6;
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+.neu-btn-primary {
+  background: #0284C7;
+  border: 1px solid #0369A1;
+  color: #ffffff;
+}
+
+.neu-btn-primary:hover {
+  background: #0369A1;
+}
+
+.neu-btn-primary:active {
+  background: #075985;
+}

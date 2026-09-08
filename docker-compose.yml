@@ -1,0 +1,61 @@
+
+# One-command spin-up for the whole prototype: Postgres + FastAPI backend +
+# the React frontend, all free/open-source images — nothing paid.
+#
+# Usage:
+#   cp backend/.env.example backend/.env   # then optionally add a real GEMINI_API_KEY
+#   docker compose up --build
+# Frontend: http://localhost:8080   Backend docs: http://localhost:8000/docs
+#
+# This is an alternative to the venv-based setup in backend/README.md — use
+# whichever is more convenient; both talk to the same code.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ai_cost_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ai_cost_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@db:5432/ai_cost_db
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-changeme}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      CORS_ORIGINS: "http://localhost:8080,http://localhost:3000,http://localhost:5173"
+      SIMULATOR_ENABLED: "true"
+      SIMULATOR_INTERVAL_SECONDS: "30"
+    ports:
+      - "8000:8000"
+    # Seed once (it no-ops if data already exists — see simulator/seed.py),
+    # then start the API. Compose restarts this container on crash, not on
+    # exit 0, so a normal shutdown/rerun re-seeds safely every time.
+    command: >
+      sh -c "python -m app.simulator.seed && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  ai_cost_pgdata:
