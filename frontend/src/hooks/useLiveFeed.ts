@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { wsUrl } from '../config';
 
 /**
  * Subscribes to the backend's /ws/live push channel (backend/app/api/live.py).
@@ -22,8 +23,7 @@ export function useLiveFeed(onTick: (event: any) => void) {
     let cancelled = false;
 
     const connect = () => {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      ws = new WebSocket(`${protocol}//${window.location.host}/ws/live`);
+      ws = new WebSocket(wsUrl('/ws/live'));
 
       ws.onopen = () => setIsLive(true);
 

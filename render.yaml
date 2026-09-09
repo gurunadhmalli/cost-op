@@ -1,0 +1,41 @@
+# Render Blueprint — deploys the FastAPI backend (with its WebSocket live
+# feed + APScheduler simulator, which need a persistent process, not
+# serverless functions) plus a free Postgres database.
+#
+# Usage: Render dashboard -> New -> Blueprint -> pick this repo -> Apply.
+# After the first deploy, set GEMINI_API_KEY (marked sync: false below) in
+# the service's Environment tab, and update CORS_ORIGINS/FRONTEND_URL once
+# the Vercel frontend URL is known.
+databases:
+  - name: cost-op-db
+    plan: free
+    databaseName: ai_cost_db
+    user: ai_cost_user
+
+services:
+  - type: web
+    name: cost-op-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /health
+    dockerCommand: >-
+      sh -c "python -m app.simulator.seed && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cost-op-db
+          property: connectionString
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,http://localhost:3000
+      - key: SIMULATOR_ENABLED
+        value: "true"
+      - key: SIMULATOR_INTERVAL_SECONDS
+        value: "30"

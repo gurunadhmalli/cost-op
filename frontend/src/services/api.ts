@@ -16,6 +16,7 @@ import {
   ActionLog,
   Plant,
 } from '../types';
+import { API_BASE } from '../config';
 
 const USE_MOCK = false; // Fallback to high-fidelity mock if backend is not yet started
 
@@ -35,7 +36,7 @@ function rangeToDates(dateRange: string): { from: string; to: string } {
 export const api = {
   getPlants: async (): Promise<Plant[]> => {
     if (USE_MOCK) return mockPlants;
-    const res = await fetch('/api/plants');
+    const res = await fetch(`${API_BASE}/api/plants`);
     return res.json();
   },
 
@@ -53,7 +54,7 @@ export const api = {
       };
     }
     const { from, to } = rangeToDates(dateRange);
-    const res = await fetch(`/api/cost/summary?plant_id=${plantId}&line_id=${lineId}&from=${from}&to=${to}`);
+    const res = await fetch(`${API_BASE}/api/cost/summary?plant_id=${plantId}&line_id=${lineId}&from=${from}&to=${to}`);
     const raw = await res.json();
     // Backend contract (08_API_Integration_Architecture.md 3.1) returns snake_case
     // fields; map into the app's internal camelCase CostSummary shape. Fields the
@@ -104,7 +105,7 @@ export const api = {
     if (plantId) params.set('plant_id', plantId);
     if (severity && severity !== 'ALL') params.set('severity', severity);
     if (status && status !== 'ALL') params.set('status', status);
-    const res = await fetch(`/api/anomalies?${params.toString()}`);
+    const res = await fetch(`${API_BASE}/api/anomalies?${params.toString()}`);
     const raw: any[] = await res.json();
     // Backend contract (08 3.2) only guarantees anomaly_id/asset_id/metric/
     // anomaly_score/detected_at/severity/status; map field names and default
@@ -144,7 +145,7 @@ export const api = {
       const rca = mockRootCauses[anomalyId] || mockRootCauses['AN-20260830-0134'];
       return rca;
     }
-    const res = await fetch(`/api/rootcause/${anomalyId}`);
+    const res = await fetch(`${API_BASE}/api/rootcause/${anomalyId}`);
     const raw = await res.json();
     // Backend contract (08 3.3): ranked_drivers[{driver, correlation_strength,
     // contribution_pct}], drill_down_path, confidence. Map field names to SHAPDriver[].
@@ -181,7 +182,7 @@ export const api = {
       await new Promise((r) => setTimeout(r, 400));
       return { rankedScenarios: mockWhatIfScenarios };
     }
-    const res = await fetch('/api/whatif', {
+    const res = await fetch(`${API_BASE}/api/whatif`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // Backend contract (08 3.4) expects candidate_actions[{action, cost, downtime_hours}].
@@ -221,7 +222,7 @@ export const api = {
       await new Promise((r) => setTimeout(r, 150));
       return mockRecommendations.filter((r) => !status || r.status === status);
     }
-    const res = await fetch(`/api/recommendations?status=${status || ''}`);
+    const res = await fetch(`${API_BASE}/api/recommendations?status=${status || ''}`);
     const raw: any[] = await res.json();
     // Backend contract (08 3.5): recommendation_id, action, projected_savings,
     // confidence, evidence{anomaly_id}. Map field names and default extras.
@@ -277,7 +278,7 @@ export const api = {
       return newAction;
     }
 
-    const res = await fetch(`/api/actions/${recommendationId}/implement`, {
+    const res = await fetch(`${API_BASE}/api/actions/${recommendationId}/implement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ implemented_by: implementedBy, notes }),
@@ -315,14 +316,14 @@ export const api = {
     // NOTE: 08_API_Integration_Architecture.md does not document a GET list
     // endpoint for action logs (only POST /api/actions/{id}/implement). This
     // assumes the backend exposes one at the same /api/actions prefix.
-    const res = await fetch('/api/actions');
+    const res = await fetch(`${API_BASE}/api/actions`);
     return res.json();
   },
 
   // Auth always talks to the real backend (not USE_MOCK) — a login has to be
   // genuinely persisted for a fresh sign-up to be usable to log back in.
   signup: async (email: string, password: string): Promise<{ userId: string; email: string }> => {
-    const res = await fetch('/api/auth/signup', {
+    const res = await fetch(`${API_BASE}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
@@ -333,7 +334,7 @@ export const api = {
   },
 
   login: async (email: string, password: string): Promise<{ userId: string; email: string }> => {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),

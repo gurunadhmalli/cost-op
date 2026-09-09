@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '../store/chatStore';
+import { wsUrl } from '../config';
 
 // Backend wire protocol (backend/app/api/chat.py + app/agent/agent.py):
 //   -> {"type": "user_message", "text": string}
@@ -15,8 +16,7 @@ function formatToolCall(tool: string, args: Record<string, any>): string {
 }
 
 function buildChatWsUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  return `${protocol}//${window.location.host}/ws/chat`;
+  return wsUrl('/ws/chat');
 }
 
 /**
