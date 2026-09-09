@@ -6,6 +6,11 @@
 # After the first deploy, set GEMINI_API_KEY (marked sync: false below) in
 # the service's Environment tab, and update CORS_ORIGINS/FRONTEND_URL once
 # the Vercel frontend URL is known.
+#
+# No dockerCommand/preDeployCommand override here on purpose — Render's
+# dashboard mangled a chained (&&) command override, so the Dockerfile's own
+# CMD (which expands $PORT itself) and the app's own idempotent startup seed
+# (see app/main.py) handle that instead of relying on this field.
 databases:
   - name: cost-op-db
     plan: free
@@ -20,8 +25,6 @@ services:
     dockerContext: ./backend
     plan: free
     healthCheckPath: /health
-    preDeployCommand: python -m app.simulator.seed
-    dockerCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         fromDatabase:

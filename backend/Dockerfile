@@ -14,7 +14,12 @@ COPY . .
 
 EXPOSE 8000
 
-# docker-compose.yml overrides this command to seed the database before the
-# very first boot; this default is what a plain `docker build && docker run`
-# needs (against an already-seeded database).
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form (via explicit sh -c) so $PORT expands — hosts like Render assign
+# a dynamic port and don't reliably support compound/chained command
+# overrides in their dashboard, so this needs to be self-contained here
+# rather than relying on a platform's command-override field. Seeding runs
+# from app.main itself (idempotent — see app/simulator/seed.py) rather than
+# as a separate chained command for the same reason; docker-compose.yml
+# still runs the seed as an explicit step first, which is harmless since
+# re-seeding an already-seeded database is a no-op.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

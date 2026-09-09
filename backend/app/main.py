@@ -24,8 +24,13 @@ from app.db.seed_demo_actions import ensure_demo_actions
 from app.api import plants, cost, anomalies, rootcause, whatif, recommendations, actions, chat, live, auth
 from app.live.manager import manager as live_manager
 from app.simulator import live_feed
+from app.simulator import seed as demo_seed
 
 Base.metadata.create_all(bind=engine)
+# Idempotent (see app/simulator/seed.py) — runs on every boot so a host that
+# can't run a separate pre-deploy/seed step (e.g. its dashboard mangles
+# chained commands) still gets a seeded database on first start.
+demo_seed.run()
 ensure_demo_user()
 ensure_demo_actions()
 
