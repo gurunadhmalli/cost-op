@@ -1,6 +1,7 @@
 import React from 'react';
-import { Sparkles, ArrowRight } from 'lucide-react';
+import { Sparkles, ArrowRight, Lock } from 'lucide-react';
 import { useFilterStore } from '../../store/filterStore';
+import { useAuthStore, canAct } from '../../store/authStore';
 import { formatCurrency } from '../../utils/formatters';
 import { api } from '../../services/api';
 import { useNavigate } from 'react-router-dom';
@@ -19,6 +20,8 @@ interface EvidenceCardProps {
 export const EvidenceCard: React.FC<EvidenceCardProps> = ({ data }) => {
   const { currency } = useFilterStore();
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.user?.role);
+  const canImplement = canAct(role);
 
   const handleImplement = async () => {
     if (data.recommendationId) {
@@ -56,15 +59,27 @@ export const EvidenceCard: React.FC<EvidenceCardProps> = ({ data }) => {
         )}
       </div>
 
-      <div className="mt-3 pt-2 border-t border-slate-300/60 flex justify-end">
-        <button
-          onClick={handleImplement}
-          className="neu-btn-primary flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11px] font-bold"
-        >
-          <span>Implement Recommendation</span>
-          <ArrowRight className="h-3 w-3" />
-        </button>
-      </div>
+      {data.recommendationId && (
+        <div className="mt-3 pt-2 border-t border-slate-300/60 flex justify-end">
+          {canImplement ? (
+            <button
+              onClick={handleImplement}
+              className="neu-btn-primary flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-[11px] font-bold"
+            >
+              <span>Implement Recommendation</span>
+              <ArrowRight className="h-3 w-3" />
+            </button>
+          ) : (
+            <span
+              className="flex items-center gap-1.5 rounded-xl bg-slate-100 border border-slate-300 px-3.5 py-1.5 text-[11px] font-semibold text-slate-500"
+              title="Viewer access is read-only — an Operator or Admin can implement this"
+            >
+              <Lock className="h-3 w-3" />
+              View only
+            </span>
+          )}
+        </div>
+      )}
     </div>
   );
 };

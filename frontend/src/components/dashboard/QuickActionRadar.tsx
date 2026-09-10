@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { ArrowRight, ShieldCheck, Zap, Wrench } from 'lucide-react';
+import { ArrowRight, Lock, ShieldCheck, Zap, Wrench } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useFilterStore } from '../../store/filterStore';
+import { useAuthStore, canAct } from '../../store/authStore';
 import { formatCurrency } from '../../utils/formatters';
 import { api } from '../../services/api';
 import { Recommendation } from '../../types';
@@ -14,6 +15,8 @@ interface QuickActionRadarProps {
 export const QuickActionRadar: React.FC<QuickActionRadarProps> = ({ recommendations, onImplemented }) => {
   const { currency } = useFilterStore();
   const navigate = useNavigate();
+  const role = useAuthStore((s) => s.user?.role);
+  const canImplement = canAct(role);
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [errorId, setErrorId] = useState<string | null>(null);
 
@@ -89,7 +92,15 @@ export const QuickActionRadar: React.FC<QuickActionRadarProps> = ({ recommendati
                   <p className="text-[10px] text-slate-400">{rec.paybackDays}d payback</p>
                 </div>
 
-                {rec.status === 'open' ? (
+                {rec.status === 'open' && !canImplement ? (
+                  <span
+                    className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded bg-slate-100 border border-slate-300 px-2 py-1 text-[10px] font-semibold text-slate-500"
+                    title="Viewer access is read-only — an Operator or Admin can implement this"
+                  >
+                    <Lock className="h-3 w-3 shrink-0" />
+                    View only
+                  </span>
+                ) : rec.status === 'open' ? (
                   <button
                     onClick={() => handleImplement(rec.recommendationId)}
                     disabled={pendingId === rec.recommendationId}
