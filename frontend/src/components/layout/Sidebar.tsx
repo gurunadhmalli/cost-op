@@ -9,6 +9,7 @@ import {
   CheckCircle2,
   FileBarChart2,
   Cpu,
+  Users,
 } from 'lucide-react';
 import { mockAnomalies, mockActionLogs } from '../../mock/mockData';
 import { useAuthStore, canAct } from '../../store/authStore';
@@ -57,6 +58,9 @@ export const Sidebar: React.FC = () => {
       badgeColor: 'bg-amber-100 text-amber-700',
     },
     { to: '/reports', label: 'Reports', icon: FileBarChart2, badge: null },
+    // Admin-only user management (create accounts, assign roles) — backend:
+    // require_roles("admin") on the /api/auth/users routes.
+    ...(role === 'admin' ? [{ to: '/users', label: 'Users', icon: Users, badge: null }] : []),
   ];
 
   return (

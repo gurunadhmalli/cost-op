@@ -371,4 +371,35 @@ export const api = {
     if (!res.ok) throw new Error(raw.detail || 'Sign in failed');
     return { userId: raw.user_id, email: raw.email, role: raw.role, token: raw.access_token };
   },
+
+  // Admin-only user management (backend/app/api/auth.py's require_roles("admin")
+  // routes) — a non-admin token gets a 403 from all three of these.
+  listUsers: async (): Promise<{ userId: string; email: string; role: Role; createdAt: string }[]> => {
+    const res = await authedFetch('/api/auth/users');
+    const raw = await res.json();
+    if (!res.ok) throw new Error(raw.detail || 'Failed to load users');
+    return raw.map((u: any) => ({ userId: u.user_id, email: u.email, role: u.role, createdAt: u.created_at }));
+  },
+
+  createUser: async (email: string, password: string, role: Role): Promise<{ userId: string; email: string; role: Role }> => {
+    const res = await authedFetch('/api/auth/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password, role }),
+    });
+    const raw = await res.json();
+    if (!res.ok) throw new Error(raw.detail || 'Failed to create account');
+    return { userId: raw.user_id, email: raw.email, role: raw.role };
+  },
+
+  updateUserRole: async (userId: string, role: Role): Promise<{ userId: string; email: string; role: Role }> => {
+    const res = await authedFetch(`/api/auth/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role }),
+    });
+    const raw = await res.json();
+    if (!res.ok) throw new Error(raw.detail || 'Failed to update role');
+    return { userId: raw.user_id, email: raw.email, role: raw.role };
+  },
 };

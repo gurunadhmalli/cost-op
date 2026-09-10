@@ -29,3 +29,7 @@ class SignupRequest(BaseModel):
 class LoginRequest(BaseModel):
     email: str
     password: str
+
+
+class UpdateRoleRequest(BaseModel):
+    role: str  # admin | operator | viewer

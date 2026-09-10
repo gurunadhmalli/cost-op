@@ -11,6 +11,7 @@ import { WhatIfPage } from './pages/WhatIfPage';
 import { CoPilotPage } from './pages/CoPilotPage';
 import { ActionTrackerPage } from './pages/ActionTrackerPage';
 import { ReportsPage } from './pages/ReportsPage';
+import { UsersPage } from './pages/UsersPage';
 import { useAuthStore, canAct } from './store/authStore';
 
 // Backend also enforces this (require_roles("operator", "admin") on
@@ -20,6 +21,13 @@ import { useAuthStore, canAct } from './store/authStore';
 const RequireCanAct: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const role = useAuthStore((s) => s.user?.role);
   return canAct(role) ? <>{children}</> : <Navigate to="/" replace />;
+};
+
+// Same idea, but for the admin-only user-management routes (backend:
+// require_roles("admin") on /api/auth/users).
+const RequireAdmin: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const role = useAuthStore((s) => s.user?.role);
+  return role === 'admin' ? <>{children}</> : <Navigate to="/" replace />;
 };
 
 const AppShell: React.FC = () => (
@@ -48,6 +56,14 @@ const AppShell: React.FC = () => (
             <Route path="/copilot" element={<CoPilotPage />} />
             <Route path="/actions" element={<ActionTrackerPage />} />
             <Route path="/reports" element={<ReportsPage />} />
+            <Route
+              path="/users"
+              element={
+                <RequireAdmin>
+                  <UsersPage />
+                </RequireAdmin>
+              }
+            />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
