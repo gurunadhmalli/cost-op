@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
 from app.engines import rootcause_engine
@@ -9,7 +10,7 @@ router = APIRouter()
 
 
 @router.get("/{anomaly_id}")
-def get_root_cause(anomaly_id: str, db: Session = Depends(get_db)):
+def get_root_cause(anomaly_id: str, db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     anomaly = db.query(models.Anomaly).filter_by(anomaly_id=anomaly_id).first()
     if not anomaly:
         raise HTTPException(status_code=404, detail=f"Unknown anomaly_id {anomaly_id}")

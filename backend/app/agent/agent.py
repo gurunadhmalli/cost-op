@@ -117,11 +117,16 @@ async def _call_gemini(chat, payload):
     return response
 
 
-async def handle_user_message(text: str, db: Session, emit):
+async def handle_user_message(text: str, db: Session, emit, role: str | None = None):
     """
     emit(event: dict) is called for each streamed event, matching
     15_Backend_Full_Specification.md Section 1.9's wire protocol:
     {"type": "tool_call", ...} / {"type": "agent_text", ...} / {"type": "evidence_card", ...}
+
+    role is the caller's authenticated role (admin/operator/viewer, from the
+    WebSocket's JWT — see app/api/chat.py), threaded through to dispatch()
+    so role-gated tools (currently run_whatif) are enforced here too, not
+    just on the equivalent REST route.
     """
     if not _gemini_available:
         await _fallback_response(text, db, emit)
@@ -156,7 +161,7 @@ async def handle_user_message(text: str, db: Session, emit):
             args = {k: v for k, v in function_call.args.items()}
             await emit({"type": "tool_call", "tool": function_call.name, "args": args})
             tool_start = time.monotonic()
-            result = dispatch(function_call.name, args, db)
+            result = dispatch(function_call.name, args, db, role)
             logger.info("tool %s took %.2fs", function_call.name, time.monotonic() - tool_start)
             last_tool_result = (function_call.name, result)
 
@@ -173,6 +178,9 @@ async def handle_user_message(text: str, db: Session, emit):
         final_text = response.text if response.candidates else "I couldn't generate a response — please try rephrasing."
     except asyncio.TimeoutError:
         await emit({"type": "agent_text", "text": "The AI assistant is taking too long to respond — please try again in a moment."})
+        return
+    except PermissionError as e:
+        await emit({"type": "agent_text", "text": str(e)})
         return
     except Exception:
         logger.exception("Gemini call failed after %.2fs", time.monotonic() - request_start)

@@ -3,6 +3,7 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
 from app.engines import baseline_engine
@@ -16,6 +17,7 @@ def list_anomalies(
     severity: str | None = Query(None),
     status: str | None = Query(None),
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     q = db.query(models.Anomaly, models.Machine).join(models.Machine, models.Anomaly.machine_id == models.Machine.machine_id)
     if plant_id:

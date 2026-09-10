@@ -11,7 +11,7 @@ import {
   User,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { useAuthStore } from '../store/authStore';
+import { useAuthStore, Role } from '../store/authStore';
 import { useLiveFeed } from '../hooks/useLiveFeed';
 import { IndustrialBackground } from '../components/login/IndustrialBackground';
 
@@ -134,8 +134,10 @@ export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const setUser = useAuthStore((s) => s.setUser);
 
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('viewer');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -162,11 +164,14 @@ export const LoginPage: React.FC = () => {
     setNotice('');
     setLoading(true);
     try {
-      const user = await api.login(email.trim(), password);
+      const user =
+        mode === 'signup'
+          ? await api.signup(email.trim(), password, role)
+          : await api.login(email.trim(), password);
       setUser(user);
       navigate('/', { replace: true });
     } catch (err: any) {
-      setError(err.message || 'Sign in failed');
+      setError(err.message || (mode === 'signup' ? 'Sign up failed' : 'Sign in failed'));
     } finally {
       setLoading(false);
     }
@@ -301,10 +306,12 @@ export const LoginPage: React.FC = () => {
           {/* Card Title & Subtitle */}
           <div className="text-center">
             <h2 className="text-2xl sm:text-[28px] font-extrabold text-slate-900 tracking-tight">
-              Sign in to your account
+              {mode === 'signup' ? 'Create your account' : 'Sign in to your account'}
             </h2>
             <p className="mt-2 text-xs sm:text-sm text-slate-500">
-              Enter your work credentials to continue.
+              {mode === 'signup'
+                ? 'Choose your access level — you can change this later with an admin.'
+                : 'Enter your work credentials to continue.'}
             </p>
           </div>
 
@@ -341,7 +348,7 @@ export const LoginPage: React.FC = () => {
                   id="password"
                   type={showPassword ? 'text' : 'password'}
                   required
-                  autoComplete="current-password"
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••••••••••"
@@ -356,16 +363,37 @@ export const LoginPage: React.FC = () => {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <div className="mt-1.5 text-right">
-                <button
-                  type="button"
-                  onClick={handleForgotPassword}
-                  className="text-xs font-semibold text-[#00a884] hover:text-teal-700 transition-colors"
-                >
-                  Forgot password?
-                </button>
-              </div>
+              {mode === 'signin' && (
+                <div className="mt-1.5 text-right">
+                  <button
+                    type="button"
+                    onClick={handleForgotPassword}
+                    className="text-xs font-semibold text-[#00a884] hover:text-teal-700 transition-colors"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+              )}
             </div>
+
+            {/* Role (sign-up only) */}
+            {mode === 'signup' && (
+              <div>
+                <label htmlFor="role" className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Access Level
+                </label>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value as Role)}
+                  className="w-full h-11 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:border-teal-500 focus:outline-none focus:ring-2 focus:ring-teal-500/20 transition-all font-medium"
+                >
+                  <option value="viewer">Viewer — read-only dashboards &amp; reports</option>
+                  <option value="operator">Operator — can also run What-If and implement actions</option>
+                  <option value="admin">Admin — full access</option>
+                </select>
+              </div>
+            )}
 
             {/* Error or Notice Alert */}
             {error && (
@@ -386,9 +414,44 @@ export const LoginPage: React.FC = () => {
               className="w-full h-11 rounded-lg bg-[#050b14] hover:bg-[#0e1726] text-white text-sm font-bold transition-all shadow-md hover:shadow-lg disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
             >
               {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              Sign In
+              {mode === 'signup' ? 'Create Account' : 'Sign In'}
             </button>
           </form>
+
+          {/* Sign in / Sign up toggle */}
+          <div className="mt-4 text-center text-xs text-slate-500 font-medium">
+            {mode === 'signin' ? (
+              <>
+                New here?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signup');
+                    setError('');
+                    setNotice('');
+                  }}
+                  className="font-semibold text-[#00a884] hover:text-teal-700 hover:underline transition-colors"
+                >
+                  Create an account
+                </button>
+              </>
+            ) : (
+              <>
+                Already have an account?{' '}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMode('signin');
+                    setError('');
+                    setNotice('');
+                  }}
+                  className="font-semibold text-[#00a884] hover:text-teal-700 hover:underline transition-colors"
+                >
+                  Sign in
+                </button>
+              </>
+            )}
+          </div>
 
           {/* Social SSO Divider */}
           <div className="my-5 flex items-center gap-3">

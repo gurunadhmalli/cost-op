@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '../store/authStore';
 import { wsUrl } from '../config';
 
 // Backend wire protocol (backend/app/api/chat.py + app/agent/agent.py):
@@ -16,7 +17,12 @@ function formatToolCall(tool: string, args: Record<string, any>): string {
 }
 
 function buildChatWsUrl(): string {
-  return wsUrl('/ws/chat');
+  // Browsers' native WebSocket API can't set an Authorization header, so the
+  // JWT travels as a query param instead — decoded server-side in
+  // backend/app/api/chat.py.
+  const token = useAuthStore.getState().user?.token;
+  const base = wsUrl('/ws/chat');
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
 /**

@@ -83,8 +83,14 @@ FUNCTION_DECLARATIONS = [
 ]
 
 
-def dispatch(name: str, args: dict, db: Session) -> dict | list:
-    """Calls the same handler function the matching REST route uses."""
+def dispatch(name: str, args: dict, db: Session, role: str | None = None) -> dict | list:
+    """
+    Calls the same handler function the matching REST route uses. Called
+    directly from app/agent/agent.py (the Co-Pilot's tool-calling loop),
+    NOT through FastAPI's request pipeline, so the route functions'
+    Depends(require_roles(...)) guards never actually run for this path --
+    role-gated tools must be checked explicitly here instead.
+    """
     if name == "get_cost_summary":
         return cost_api.cost_summary(
             plant_id=args.get("plant_id"), line_id=args.get("line_id"),
@@ -98,6 +104,8 @@ def dispatch(name: str, args: dict, db: Session) -> dict | list:
     if name == "get_root_cause":
         return rootcause_api.get_root_cause(args["anomaly_id"], db=db)
     if name == "run_whatif":
+        if role not in ("operator", "admin"):
+            raise PermissionError("Running What-If scenarios requires Operator or Admin access.")
         payload = WhatIfRequest(
             asset_id=args["asset_id"],
             candidate_actions=args.get("candidate_actions") or [

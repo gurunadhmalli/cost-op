@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
 
@@ -8,7 +9,9 @@ router = APIRouter()
 
 
 @router.get("")
-def list_recommendations(status: str | None = Query(None), db: Session = Depends(get_db)):
+def list_recommendations(
+    status: str | None = Query(None), db: Session = Depends(get_db), user: dict = Depends(get_current_user)
+):
     q = (
         db.query(models.Recommendation, models.RootCause, models.Anomaly, models.Machine)
         .join(models.RootCause, models.Recommendation.root_cause_id == models.RootCause.root_cause_id)

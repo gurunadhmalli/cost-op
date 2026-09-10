@@ -11,6 +11,7 @@ import {
   Cpu,
 } from 'lucide-react';
 import { mockAnomalies, mockActionLogs } from '../../mock/mockData';
+import { useAuthStore, canAct } from '../../store/authStore';
 
 // The underlying engine info (broker/model/optimizer/etc.) is kept here for
 // internal reference (e.g. a future admin/diagnostics panel) but is no longer
@@ -28,6 +29,7 @@ const ENGINE_ARCHITECTURE = [
 export const Sidebar: React.FC = () => {
   const openAnomaliesCount = mockAnomalies.filter((a) => a.status === 'open').length;
   const pendingActionsCount = mockActionLogs.filter((a) => a.trackingStatus === 'pending_verification').length;
+  const role = useAuthStore((s) => s.user?.role);
 
   // Short, plain labels — this is app navigation, not a marketing sitemap.
   // Only count badges (actionable state) survive; decorative tech/product
@@ -42,7 +44,10 @@ export const Sidebar: React.FC = () => {
       badgeColor: 'bg-rose-100 text-rose-700',
     },
     { to: '/rootcause', label: 'Root Cause', icon: GitFork, badge: null },
-    { to: '/whatif', label: 'What-If', icon: Sliders, badge: null },
+    // What-If runs a scenario, gated to Operator/Admin on the backend
+    // (see backend/app/api/whatif.py) — hide the link for a Viewer rather
+    // than let them land on a page whose only action always 403s.
+    ...(canAct(role) ? [{ to: '/whatif', label: 'What-If', icon: Sliders, badge: null }] : []),
     { to: '/copilot', label: 'Co-Pilot', icon: Bot, badge: null },
     {
       to: '/actions',

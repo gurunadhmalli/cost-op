@@ -3,6 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.engines import cost_engine
 
@@ -16,6 +17,7 @@ def cost_summary(
     from_: str | None = Query(None, alias="from"),
     to: str | None = Query(None),
     db: Session = Depends(get_db),
+    user: dict = Depends(get_current_user),
 ):
     date_from = datetime.fromisoformat(from_) if from_ else None
     date_to = datetime.fromisoformat(to) if to else None

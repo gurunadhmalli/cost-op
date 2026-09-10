@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user, require_roles
 from app.db.database import get_db
 from app.db import models
 from app.schemas import ImplementActionRequest
@@ -11,7 +12,12 @@ router = APIRouter()
 
 
 @router.post("/{recommendation_id}/implement")
-def implement_action(recommendation_id: str, payload: ImplementActionRequest, db: Session = Depends(get_db)):
+def implement_action(
+    recommendation_id: str,
+    payload: ImplementActionRequest,
+    db: Session = Depends(get_db),
+    user: dict = Depends(require_roles("operator", "admin")),
+):
     rec = db.query(models.Recommendation).filter_by(recommendation_id=recommendation_id).first()
     if not rec:
         raise HTTPException(status_code=404, detail=f"Unknown recommendation_id {recommendation_id}")
@@ -44,7 +50,7 @@ def implement_action(recommendation_id: str, payload: ImplementActionRequest, db
 
 
 @router.get("")
-def list_action_logs(db: Session = Depends(get_db)):
+def list_action_logs(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     """Returns camelCase directly — the one list endpoint the frontend's
     getActionLogs() consumes with NO field mapping, per
     15_Backend_Full_Specification.md Section 1.8."""

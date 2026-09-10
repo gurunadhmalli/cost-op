@@ -5,6 +5,7 @@ from collections import defaultdict
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.database import get_db
 from app.db import models
 
@@ -12,7 +13,7 @@ router = APIRouter()
 
 
 @router.get("")
-def get_plants(db: Session = Depends(get_db)):
+def get_plants(db: Session = Depends(get_db), user: dict = Depends(get_current_user)):
     plants = db.query(models.Plant).all()
     result = []
     for plant in plants:

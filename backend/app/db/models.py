@@ -27,6 +27,7 @@ class User(Base):
     email = Column(String(255), nullable=False, unique=True)
     password_hash = Column(String(128), nullable=False)
     password_salt = Column(String(64), nullable=False)
+    role = Column(String(20), nullable=False, default="viewer")  # admin | operator | viewer
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 

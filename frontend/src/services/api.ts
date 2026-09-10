@@ -17,8 +17,22 @@ import {
   Plant,
 } from '../types';
 import { API_BASE } from '../config';
+import { useAuthStore, Role } from '../store/authStore';
 
 const USE_MOCK = false; // Fallback to high-fidelity mock if backend is not yet started
+
+// Every authenticated backend route needs this (see backend/app/core/deps.py's
+// get_current_user) — centralized here so each call below doesn't repeat it.
+// A 401 means the token is missing/expired: log out so the app falls back to
+// the login screen instead of quietly failing every call from then on.
+async function authedFetch(path: string, init: RequestInit = {}): Promise<Response> {
+  const token = useAuthStore.getState().user?.token;
+  const headers = new Headers(init.headers);
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  if (res.status === 401) useAuthStore.getState().logout();
+  return res;
+}
 
 // The documented contract (08_API_Integration_Architecture.md) takes ISO `from`/`to`
 // dates on GET /api/cost/summary, while the UI works in date-range shorthands.
@@ -36,7 +50,7 @@ function rangeToDates(dateRange: string): { from: string; to: string } {
 export const api = {
   getPlants: async (): Promise<Plant[]> => {
     if (USE_MOCK) return mockPlants;
-    const res = await fetch(`${API_BASE}/api/plants`);
+    const res = await authedFetch('/api/plants');
     return res.json();
   },
 
@@ -54,7 +68,7 @@ export const api = {
       };
     }
     const { from, to } = rangeToDates(dateRange);
-    const res = await fetch(`${API_BASE}/api/cost/summary?plant_id=${plantId}&line_id=${lineId}&from=${from}&to=${to}`);
+    const res = await authedFetch(`/api/cost/summary?plant_id=${plantId}&line_id=${lineId}&from=${from}&to=${to}`);
     const raw = await res.json();
     // Backend contract (08_API_Integration_Architecture.md 3.1) returns snake_case
     // fields; map into the app's internal camelCase CostSummary shape. Fields the
@@ -105,7 +119,7 @@ export const api = {
     if (plantId) params.set('plant_id', plantId);
     if (severity && severity !== 'ALL') params.set('severity', severity);
     if (status && status !== 'ALL') params.set('status', status);
-    const res = await fetch(`${API_BASE}/api/anomalies?${params.toString()}`);
+    const res = await authedFetch(`/api/anomalies?${params.toString()}`);
     const raw: any[] = await res.json();
     // Backend contract (08 3.2) only guarantees anomaly_id/asset_id/metric/
     // anomaly_score/detected_at/severity/status; map field names and default
@@ -145,7 +159,7 @@ export const api = {
       const rca = mockRootCauses[anomalyId] || mockRootCauses['AN-20260830-0134'];
       return rca;
     }
-    const res = await fetch(`${API_BASE}/api/rootcause/${anomalyId}`);
+    const res = await authedFetch(`/api/rootcause/${anomalyId}`);
     const raw = await res.json();
     // Backend contract (08 3.3): ranked_drivers[{driver, correlation_strength,
     // contribution_pct}], drill_down_path, confidence. Map field names to SHAPDriver[].
@@ -182,7 +196,7 @@ export const api = {
       await new Promise((r) => setTimeout(r, 400));
       return { rankedScenarios: mockWhatIfScenarios };
     }
-    const res = await fetch(`${API_BASE}/api/whatif`, {
+    const res = await authedFetch('/api/whatif', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       // Backend contract (08 3.4) expects candidate_actions[{action, cost, downtime_hours}].
@@ -196,6 +210,12 @@ export const api = {
       }),
     });
     const raw = await res.json();
+    // Role-gated on the backend (operator/admin only) — without this check a
+    // 403 {"detail": "..."} response would silently map to an empty
+    // rankedScenarios array instead of telling the viewer why nothing ran.
+    if (!res.ok) {
+      throw new Error(raw.detail || `Failed to run What-If (HTTP ${res.status})`);
+    }
     // Backend returns snake_case ranked_scenarios; map into camelCase WhatIfCandidateAction[].
     const rankedScenarios: WhatIfCandidateAction[] = (raw.ranked_scenarios ?? []).map(
       (s: any, idx: number) => ({
@@ -222,7 +242,7 @@ export const api = {
       await new Promise((r) => setTimeout(r, 150));
       return mockRecommendations.filter((r) => !status || r.status === status);
     }
-    const res = await fetch(`${API_BASE}/api/recommendations?status=${status || ''}`);
+    const res = await authedFetch(`/api/recommendations?status=${status || ''}`);
     const raw: any[] = await res.json();
     // Backend contract (08 3.5): recommendation_id, action, projected_savings,
     // confidence, evidence{anomaly_id}. Map field names and default extras.
@@ -278,7 +298,7 @@ export const api = {
       return newAction;
     }
 
-    const res = await fetch(`${API_BASE}/api/actions/${recommendationId}/implement`, {
+    const res = await authedFetch(`/api/actions/${recommendationId}/implement`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ implemented_by: implementedBy, notes }),
@@ -316,24 +336,32 @@ export const api = {
     // NOTE: 08_API_Integration_Architecture.md does not document a GET list
     // endpoint for action logs (only POST /api/actions/{id}/implement). This
     // assumes the backend exposes one at the same /api/actions prefix.
-    const res = await fetch(`${API_BASE}/api/actions`);
+    const res = await authedFetch('/api/actions');
     return res.json();
   },
 
   // Auth always talks to the real backend (not USE_MOCK) — a login has to be
   // genuinely persisted for a fresh sign-up to be usable to log back in.
-  signup: async (email: string, password: string): Promise<{ userId: string; email: string }> => {
+  // Neither call goes through authedFetch: there's no token yet to send.
+  signup: async (
+    email: string,
+    password: string,
+    role: Role
+  ): Promise<{ userId: string; email: string; role: Role; token: string }> => {
     const res = await fetch(`${API_BASE}/api/auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, role }),
     });
     const raw = await res.json();
     if (!res.ok) throw new Error(raw.detail || 'Sign up failed');
-    return { userId: raw.user_id, email: raw.email };
+    return { userId: raw.user_id, email: raw.email, role: raw.role, token: raw.access_token };
   },
 
-  login: async (email: string, password: string): Promise<{ userId: string; email: string }> => {
+  login: async (
+    email: string,
+    password: string
+  ): Promise<{ userId: string; email: string; role: Role; token: string }> => {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -341,6 +369,6 @@ export const api = {
     });
     const raw = await res.json();
     if (!res.ok) throw new Error(raw.detail || 'Sign in failed');
-    return { userId: raw.user_id, email: raw.email };
+    return { userId: raw.user_id, email: raw.email, role: raw.role, token: raw.access_token };
   },
 };

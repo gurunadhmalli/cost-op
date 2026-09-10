@@ -13,3 +13,6 @@ frontend/dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# docker compose env (local secrets — never commit)
+.env

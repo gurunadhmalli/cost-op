@@ -11,7 +11,16 @@ import { WhatIfPage } from './pages/WhatIfPage';
 import { CoPilotPage } from './pages/CoPilotPage';
 import { ActionTrackerPage } from './pages/ActionTrackerPage';
 import { ReportsPage } from './pages/ReportsPage';
-import { useAuthStore } from './store/authStore';
+import { useAuthStore, canAct } from './store/authStore';
+
+// Backend also enforces this (require_roles("operator", "admin") on
+// POST /api/whatif) — this is the UI-side half, so a Viewer typing the URL
+// directly gets redirected instead of landing on a page whose only action
+// always fails.
+const RequireCanAct: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const role = useAuthStore((s) => s.user?.role);
+  return canAct(role) ? <>{children}</> : <Navigate to="/" replace />;
+};
 
 const AppShell: React.FC = () => (
   <div className="flex min-h-screen flex-col bg-[#EBF0F7] text-slate-800 antialiased">
@@ -28,7 +37,14 @@ const AppShell: React.FC = () => (
             <Route path="/" element={<DashboardPage />} />
             <Route path="/anomalies" element={<AnomaliesPage />} />
             <Route path="/rootcause" element={<RootCausePage />} />
-            <Route path="/whatif" element={<WhatIfPage />} />
+            <Route
+              path="/whatif"
+              element={
+                <RequireCanAct>
+                  <WhatIfPage />
+                </RequireCanAct>
+              }
+            />
             <Route path="/copilot" element={<CoPilotPage />} />
             <Route path="/actions" element={<ActionTrackerPage />} />
             <Route path="/reports" element={<ReportsPage />} />

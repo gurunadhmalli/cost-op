@@ -127,14 +127,22 @@ export const Navbar: React.FC = () => {
         </button>
 
         {user && (
-          <button
-            onClick={logout}
-            className="neu-btn flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:text-rose-700"
-            title={`Signed in as ${user.email}`}
-          >
-            <LogOut className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Sign out</span>
-          </button>
+          <>
+            <span
+              className="neu-inset hidden rounded-md px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wide text-slate-600 sm:inline-block"
+              title={`Signed in as ${user.email}`}
+            >
+              {user.role}
+            </span>
+            <button
+              onClick={logout}
+              className="neu-btn flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-slate-600 hover:text-rose-700"
+              title={`Signed in as ${user.email}`}
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </>
         )}
       </div>
     </header>

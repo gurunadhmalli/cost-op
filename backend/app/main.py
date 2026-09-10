@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from app.core.config import settings
 from app.db.database import Base, engine
@@ -27,6 +28,13 @@ from app.simulator import live_feed
 from app.simulator import seed as demo_seed
 
 Base.metadata.create_all(bind=engine)
+# create_all only creates missing TABLES, it never alters an existing one —
+# so a users table from before the RBAC change won't have gotten the new
+# `role` column from that call above. There's no migration framework here
+# (see backend/README.md), so patch it in directly; harmless/no-op once the
+# column exists.
+with engine.begin() as _conn:
+    _conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'viewer'"))
 # Idempotent (see app/simulator/seed.py) — runs on every boot so a host that
 # can't run a separate pre-deploy/seed step (e.g. its dashboard mangles
 # chained commands) still gets a seeded database on first start.

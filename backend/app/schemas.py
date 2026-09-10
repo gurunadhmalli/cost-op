@@ -23,6 +23,7 @@ class ImplementActionRequest(BaseModel):
 class SignupRequest(BaseModel):
     email: str
     password: str
+    role: str = "viewer"  # admin | operator | viewer
 
 
 class LoginRequest(BaseModel):
