@@ -10,11 +10,21 @@ grabbed a key, and keeps the app from crashing without one.
 """
 import asyncio
 import json
+import logging
+import time
 
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.agent.tools import FUNCTION_DECLARATIONS, dispatch
+
+logger = logging.getLogger("app.agent")
+logger.setLevel(logging.INFO)
+if not logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(asctime)s [agent] %(message)s"))
+    logger.addHandler(_handler)
+    logger.propagate = False
 
 _model = None
 _gemini_available = False
@@ -35,6 +45,9 @@ if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip().lower() not in _P
                 "(₹ savings, % confidence), and always ground answers in tool results — never "
                 "invent a number that didn't come from a tool call."
             ),
+            # Keep responses short so each hop finishes generating quickly —
+            # this is a concise chat assistant, not a report writer.
+            generation_config=genai.types.GenerationConfig(max_output_tokens=512),
         )
         _gemini_available = True
     except Exception:
@@ -51,15 +64,18 @@ async def handle_user_message(text: str, db: Session, emit):
         await _fallback_response(text, db, emit)
         return
 
+    request_start = time.monotonic()
     chat = _model.start_chat()
     # google-generativeai's SDK is synchronous/blocking; run it in a worker
     # thread so a slow Gemini response doesn't stall the event loop (and
     # with it, every other request — including /ws/live's ticks — for the
     # whole server, not just this connection).
+    hop_start = time.monotonic()
     response = await asyncio.to_thread(chat.send_message, text)
+    logger.info("gemini hop 0 (initial) took %.2fs", time.monotonic() - hop_start)
     last_tool_result = None
 
-    for _ in range(5):  # cap tool-call hops to avoid runaway loops
+    for hop in range(1, 6):  # cap tool-call hops to avoid runaway loops
         function_call = None
         for part in response.candidates[0].content.parts:
             if getattr(part, "function_call", None) and part.function_call.name:
@@ -70,9 +86,12 @@ async def handle_user_message(text: str, db: Session, emit):
 
         args = {k: v for k, v in function_call.args.items()}
         await emit({"type": "tool_call", "tool": function_call.name, "args": args})
+        tool_start = time.monotonic()
         result = dispatch(function_call.name, args, db)
+        logger.info("tool %s took %.2fs", function_call.name, time.monotonic() - tool_start)
         last_tool_result = (function_call.name, result)
 
+        hop_start = time.monotonic()
         response = await asyncio.to_thread(
             chat.send_message,
             genai.protos.Content(parts=[genai.protos.Part(
@@ -81,7 +100,9 @@ async def handle_user_message(text: str, db: Session, emit):
                 )
             )]),
         )
+        logger.info("gemini hop %d (after %s) took %.2fs", hop, function_call.name, time.monotonic() - hop_start)
 
+    logger.info("handle_user_message total %.2fs", time.monotonic() - request_start)
     final_text = response.text if response.candidates else "I couldn't generate a response — please try rephrasing."
     await emit({"type": "agent_text", "text": final_text})
 

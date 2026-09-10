@@ -112,6 +112,13 @@ export const ChatDrawer: React.FC = () => {
           </div>
         )}
 
+        {isStreaming && !activeTool && (
+          <div className="flex items-center gap-2 rounded-xl bg-sky-100 p-3 text-xs font-mono text-sky-900 border border-sky-300 animate-pulse">
+            <Cpu className="h-4 w-4 text-sky-600 animate-spin" />
+            <span>Co-Pilot is thinking…</span>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 

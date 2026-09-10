@@ -13,7 +13,7 @@ class Settings(BaseSettings):
 
     # AI Assistant — Google Gemini API (free tier)
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-2.5-flash-lite"
 
     # Backend
     JWT_SECRET: str = "dev-secret-change-me"
