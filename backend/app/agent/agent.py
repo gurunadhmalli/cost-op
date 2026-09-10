@@ -57,7 +57,12 @@ if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip().lower() not in _P
     except Exception:
         _gemini_available = False
 
-GEMINI_TIMEOUT_SECONDS = 25
+# Render's free tier (0.1 shared CPU) is markedly slower than a local
+# machine for the same Gemini call, especially on the first request after
+# the container's been idle -- 25s was cutting off requests that would
+# have succeeded. This is a safety net against a truly hung call, not a
+# tight SLA, so give it real headroom.
+GEMINI_TIMEOUT_SECONDS = 45
 
 
 def _dispatch_safe(name: str, args: dict, db: Session):
