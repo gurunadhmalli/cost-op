@@ -65,45 +65,51 @@ async def handle_user_message(text: str, db: Session, emit):
         return
 
     request_start = time.monotonic()
-    chat = _model.start_chat()
-    # google-generativeai's SDK is synchronous/blocking; run it in a worker
-    # thread so a slow Gemini response doesn't stall the event loop (and
-    # with it, every other request — including /ws/live's ticks — for the
-    # whole server, not just this connection).
-    hop_start = time.monotonic()
-    response = await asyncio.to_thread(chat.send_message, text)
-    logger.info("gemini hop 0 (initial) took %.2fs", time.monotonic() - hop_start)
     last_tool_result = None
-
-    for hop in range(1, 6):  # cap tool-call hops to avoid runaway loops
-        function_call = None
-        for part in response.candidates[0].content.parts:
-            if getattr(part, "function_call", None) and part.function_call.name:
-                function_call = part.function_call
-                break
-        if not function_call:
-            break
-
-        args = {k: v for k, v in function_call.args.items()}
-        await emit({"type": "tool_call", "tool": function_call.name, "args": args})
-        tool_start = time.monotonic()
-        result = dispatch(function_call.name, args, db)
-        logger.info("tool %s took %.2fs", function_call.name, time.monotonic() - tool_start)
-        last_tool_result = (function_call.name, result)
-
+    try:
+        chat = _model.start_chat()
+        # google-generativeai's SDK is synchronous/blocking; run it in a worker
+        # thread so a slow Gemini response doesn't stall the event loop (and
+        # with it, every other request — including /ws/live's ticks — for the
+        # whole server, not just this connection).
         hop_start = time.monotonic()
-        response = await asyncio.to_thread(
-            chat.send_message,
-            genai.protos.Content(parts=[genai.protos.Part(
-                function_response=genai.protos.FunctionResponse(
-                    name=function_call.name, response={"result": json.loads(json.dumps(result, default=str))}
-                )
-            )]),
-        )
-        logger.info("gemini hop %d (after %s) took %.2fs", hop, function_call.name, time.monotonic() - hop_start)
+        response = await asyncio.to_thread(chat.send_message, text)
+        logger.info("gemini hop 0 (initial) took %.2fs", time.monotonic() - hop_start)
 
-    logger.info("handle_user_message total %.2fs", time.monotonic() - request_start)
-    final_text = response.text if response.candidates else "I couldn't generate a response — please try rephrasing."
+        for hop in range(1, 6):  # cap tool-call hops to avoid runaway loops
+            function_call = None
+            for part in response.candidates[0].content.parts:
+                if getattr(part, "function_call", None) and part.function_call.name:
+                    function_call = part.function_call
+                    break
+            if not function_call:
+                break
+
+            args = {k: v for k, v in function_call.args.items()}
+            await emit({"type": "tool_call", "tool": function_call.name, "args": args})
+            tool_start = time.monotonic()
+            result = dispatch(function_call.name, args, db)
+            logger.info("tool %s took %.2fs", function_call.name, time.monotonic() - tool_start)
+            last_tool_result = (function_call.name, result)
+
+            hop_start = time.monotonic()
+            response = await asyncio.to_thread(
+                chat.send_message,
+                genai.protos.Content(parts=[genai.protos.Part(
+                    function_response=genai.protos.FunctionResponse(
+                        name=function_call.name, response={"result": json.loads(json.dumps(result, default=str))}
+                    )
+                )]),
+            )
+            logger.info("gemini hop %d (after %s) took %.2fs", hop, function_call.name, time.monotonic() - hop_start)
+
+        logger.info("handle_user_message total %.2fs", time.monotonic() - request_start)
+        final_text = response.text if response.candidates else "I couldn't generate a response — please try rephrasing."
+    except Exception:
+        logger.exception("Gemini call failed after %.2fs", time.monotonic() - request_start)
+        await emit({"type": "agent_text", "text": "The AI assistant hit an error reaching Gemini — please try again in a moment."})
+        return
+
     await emit({"type": "agent_text", "text": final_text})
 
     card = _build_evidence_card(last_tool_result)
