@@ -40,10 +40,14 @@ if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip().lower() not in _P
             tools=[{"function_declarations": FUNCTION_DECLARATIONS}],
             system_instruction=(
                 "You are the AI Cost Co-Pilot for an industrial cost optimization platform. "
-                "Answer questions about cost, anomalies, root causes, what-if scenarios, and "
-                "recommendations using the provided tools. Be concise, cite concrete numbers "
-                "(₹ savings, % confidence), and always ground answers in tool results — never "
-                "invent a number that didn't come from a tool call."
+                "Each user message includes a JSON 'Live context' block already fetched from "
+                "the plant's live systems (open anomalies, root cause of the top anomaly, open "
+                "recommendations) — answer directly from that block whenever it covers the "
+                "question, without calling a tool. Only call a tool if the question needs data "
+                "that isn't in the context block (e.g. a specific what-if scenario, a different "
+                "status/severity filter). Be concise, cite concrete numbers (₹ savings, % "
+                "confidence), and never invent a number that didn't come from the context or a "
+                "tool result."
             ),
             # Keep responses short so each hop finishes generating quickly —
             # this is a concise chat assistant, not a report writer.
@@ -52,6 +56,60 @@ if settings.GEMINI_API_KEY and settings.GEMINI_API_KEY.strip().lower() not in _P
         _gemini_available = True
     except Exception:
         _gemini_available = False
+
+GEMINI_TIMEOUT_SECONDS = 25
+
+
+def _dispatch_safe(name: str, args: dict, db: Session):
+    try:
+        return dispatch(name, args, db)
+    except Exception:
+        logger.exception("prefetch dispatch failed for %s", name)
+        return None
+
+
+def _prefetch_context(db: Session):
+    """
+    Runs the cheap, local (DB-only, no network) tool calls up front so the
+    common questions ("why did cost spike", "top savings opportunities")
+    can be answered in a SINGLE Gemini round-trip instead of the 2-3
+    sequential ones the old pure function-calling loop needed — each
+    Gemini call is the slow part (seconds), each of these is milliseconds.
+    Returns (context_dict, seed_tool_result_for_evidence_card).
+    """
+    context: dict = {}
+    seed_tool_result = None
+
+    anomalies = _dispatch_safe("get_anomalies", {"status": "open"}, db) or []
+    context["open_anomalies"] = anomalies
+
+    if anomalies:
+        top = max(anomalies, key=lambda a: a.get("anomaly_score", 0))
+        rca = _dispatch_safe("get_root_cause", {"anomaly_id": top["anomaly_id"]}, db)
+        if rca:
+            context["root_cause_for_top_anomaly"] = rca
+            seed_tool_result = ("get_root_cause", rca)
+
+    recs = _dispatch_safe("get_recommendations", {"status": "open"}, db) or []
+    context["open_recommendations"] = recs
+    if recs and seed_tool_result is None:
+        seed_tool_result = ("get_recommendations", recs)
+
+    return context, seed_tool_result
+
+
+async def _call_gemini(chat, payload):
+    hop_start = time.monotonic()
+    try:
+        response = await asyncio.wait_for(
+            asyncio.to_thread(chat.send_message, payload),
+            timeout=GEMINI_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("gemini hop timed out after %ds", GEMINI_TIMEOUT_SECONDS)
+        raise
+    logger.info("gemini hop took %.2fs", time.monotonic() - hop_start)
+    return response
 
 
 async def handle_user_message(text: str, db: Session, emit):
@@ -65,18 +123,23 @@ async def handle_user_message(text: str, db: Session, emit):
         return
 
     request_start = time.monotonic()
-    last_tool_result = None
+    context, last_tool_result = _prefetch_context(db)
+    logger.info("prefetch took %.2fs", time.monotonic() - request_start)
+
+    prompt = (
+        f"Live context (already fetched):\n{json.dumps(context, default=str)}\n\n"
+        f"User question: {text}"
+    )
+
     try:
         chat = _model.start_chat()
         # google-generativeai's SDK is synchronous/blocking; run it in a worker
         # thread so a slow Gemini response doesn't stall the event loop (and
         # with it, every other request — including /ws/live's ticks — for the
         # whole server, not just this connection).
-        hop_start = time.monotonic()
-        response = await asyncio.to_thread(chat.send_message, text)
-        logger.info("gemini hop 0 (initial) took %.2fs", time.monotonic() - hop_start)
+        response = await _call_gemini(chat, prompt)
 
-        for hop in range(1, 6):  # cap tool-call hops to avoid runaway loops
+        for _hop in range(3):  # safety-net hops for questions the prefetch didn't cover
             function_call = None
             for part in response.candidates[0].content.parts:
                 if getattr(part, "function_call", None) and part.function_call.name:
@@ -92,19 +155,20 @@ async def handle_user_message(text: str, db: Session, emit):
             logger.info("tool %s took %.2fs", function_call.name, time.monotonic() - tool_start)
             last_tool_result = (function_call.name, result)
 
-            hop_start = time.monotonic()
-            response = await asyncio.to_thread(
-                chat.send_message,
+            response = await _call_gemini(
+                chat,
                 genai.protos.Content(parts=[genai.protos.Part(
                     function_response=genai.protos.FunctionResponse(
                         name=function_call.name, response={"result": json.loads(json.dumps(result, default=str))}
                     )
                 )]),
             )
-            logger.info("gemini hop %d (after %s) took %.2fs", hop, function_call.name, time.monotonic() - hop_start)
 
         logger.info("handle_user_message total %.2fs", time.monotonic() - request_start)
         final_text = response.text if response.candidates else "I couldn't generate a response — please try rephrasing."
+    except asyncio.TimeoutError:
+        await emit({"type": "agent_text", "text": "The AI assistant is taking too long to respond — please try again in a moment."})
+        return
     except Exception:
         logger.exception("Gemini call failed after %.2fs", time.monotonic() - request_start)
         await emit({"type": "agent_text", "text": "The AI assistant hit an error reaching Gemini — please try again in a moment."})
